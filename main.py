@@ -1,9 +1,24 @@
 import argparse
+import json
 import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from call_functions import available_functions, call_function
+
+system_prompt = """
+You are a helpful AI coding agent.
+
+When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
+
+- List files and directories
+- Read file contents
+- Execute Python files with optional arguments
+- Write or overwrite files
+
+All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
+"""
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI Code Assistant")
@@ -21,6 +36,7 @@ def main() -> None:
         api_key=api_key,
     )
     messages = [
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": args.user_prompt},
     ]
     if args.verbose:
@@ -33,6 +49,7 @@ def generate_content(client: OpenAI, messages: list, verbose: bool) -> None:
     response = client.chat.completions.create(
         model="openrouter/free",
         messages=messages,
+        tools=available_functions,
     )
     if not response.usage:
         raise RuntimeError("API response appears to be malformed")
@@ -40,9 +57,16 @@ def generate_content(client: OpenAI, messages: list, verbose: bool) -> None:
     if verbose:
         print("Prompt tokens:", response.usage.prompt_tokens)
         print("Response tokens:", response.usage.completion_tokens)
-    print("Response:")
     print(response.choices[0].message.content)
 
+    message = response.choices[0].message
+    if message.tool_calls:
+        for tool_call in message.tool_calls:
+            result_message = call_function(tool_call, verbose=verbose)
+            if not result_message.get("content"):
+                raise RuntimeError("Function call returned empty content")
+            if verbose:
+                print(f"-> {result_message['content']}")
 
 if __name__ == "__main__":
     main()

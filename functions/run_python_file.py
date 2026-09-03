@@ -1,4 +1,3 @@
-from test_get_file_content import result
 import os
 import subprocess
 
@@ -51,3 +50,30 @@ def run_python_file(
         return f"Error: executing Python file: {str(e)}"
 
     return "\n".join(output)
+
+
+schema_run_python_file = {
+    "type": "function",
+    "function": {
+        "name": "run_python_file",
+        "description": "Executes a Python file within the working directory and returns its output (stdout and stderr)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the Python file (.py) to execute, relative to the working directory",
+                },
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                    },
+                    "description": "Optional command-line arguments to pass to the Python script",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+}
+
