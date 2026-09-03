@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+import sys
+
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -46,27 +48,46 @@ def main() -> None:
 
 
 def generate_content(client: OpenAI, messages: list, verbose: bool) -> None:
-    response = client.chat.completions.create(
-        model="openrouter/free",
-        messages=messages,
-        tools=available_functions,
-    )
-    if not response.usage:
-        raise RuntimeError("API response appears to be malformed")
+    for _ in range(20):
+        response = client.chat.completions.create(
+            model="openrouter/free",
+            messages=messages,
+            tools=available_functions,
+        )
+        if not response.usage:
+            raise RuntimeError("API response appears to be malformed")
 
-    if verbose:
-        print("Prompt tokens:", response.usage.prompt_tokens)
-        print("Response tokens:", response.usage.completion_tokens)
-    print(response.choices[0].message.content)
+        if verbose:
+            print("Prompt tokens:", response.usage.prompt_tokens)
+            print("Response tokens:", response.usage.completion_tokens)
 
-    message = response.choices[0].message
-    if message.tool_calls:
-        for tool_call in message.tool_calls:
-            result_message = call_function(tool_call, verbose=verbose)
-            if not result_message.get("content"):
-                raise RuntimeError("Function call returned empty content")
-            if verbose:
-                print(f"-> {result_message['content']}")
+        message = response.choices[0].message
+        
+        # 1. Append assistant's turn to conversation history
+        messages.append(message)
+
+        # 2. Check if tools were requested
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                result_message = call_function(tool_call, verbose=verbose)
+                if not result_message.get("content"):
+                    raise RuntimeError("Function call returned empty content")
+                
+                # Append tool's result to conversation history
+                messages.append(result_message)
+                
+                if verbose:
+                    print(f"-> {result_message['content']}")
+        else:
+            # 3. No tool calls -> LLM has its final answer!
+            if message.content:
+                print(message.content)
+            return
+
+    # 4. If 20 iterations were exhausted without a final response
+    print("Error: Reached maximum iterations (20) without a final response.")
+    sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
